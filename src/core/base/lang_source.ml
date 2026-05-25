@@ -559,7 +559,7 @@ let source_methods =
       value =
         (fun s ->
           val_fun [] (fun _ ->
-              s#abort_track;
+              s#skip_track;
               unit));
     };
     {

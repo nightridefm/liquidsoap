@@ -363,6 +363,11 @@ object
   (** Tells the source to end its current track. *)
   method virtual abort_track : unit
 
+  (** Effectively skips the current track: abort track, end the current
+      streaming cycle, generate a new frame if ready and drop all data until the
+      first track mark if present. *)
+  method skip_track : unit
+
   (** {1 Utilities} *)
 
   method log : Log.t
