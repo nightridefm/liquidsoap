@@ -190,7 +190,7 @@ class switch ~all_predicates children =
           let on_leave = s.child.on_leave in
           let on_leave ~force =
             if force || not proxy#is_up then (
-              on_leave proxy !has_track_marks;
+              on_leave s.child.source !has_track_marks;
               true)
             else false
           in

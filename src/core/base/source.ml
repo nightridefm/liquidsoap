@@ -483,6 +483,10 @@ class virtual operator ?(stack = []) ?clock ~name sources =
 
     val mutable _cache = None
     val mutable consumed = 0
+
+    method private cache =
+      match _cache with None -> self#empty_frame | Some c -> c
+
     val mutable on_before_streaming_cycle = []
 
     method on_before_streaming_cycle fn =
@@ -492,9 +496,6 @@ class virtual operator ?(stack = []) ?clock ~name sources =
 
     method on_after_streaming_cycle fn =
       on_after_streaming_cycle <- on_after_streaming_cycle @ [fn]
-
-    method private cache =
-      match _cache with None -> self#empty_frame | Some c -> c
 
     method private cache_pos =
       match _cache with None -> 0 | Some c -> Frame.position c
@@ -602,6 +603,24 @@ class virtual operator ?(stack = []) ?clock ~name sources =
        Typically, that signal is just re-routed, or makes the next file
        to be played if there's anything like a file. *)
     method virtual abort_track : unit
+    val should_skip_track = Atomic.make false
+
+    method private do_skip_track =
+      self#after_streaming_cycle;
+      self#abort_track;
+      if self#is_ready then (
+        let f = self#peek_frame in
+        (match Frame.track_marks f with
+          | p :: _ -> self#consumed p
+          | _ -> self#consumed (Frame.position f));
+        self#after_streaming_cycle)
+
+    method skip_track = Atomic.set should_skip_track true
+
+    initializer
+      self#on_before_streaming_cycle (fun () ->
+          if Atomic.exchange should_skip_track false then self#do_skip_track)
+
     val mutable buffer = None
 
     method buffer =

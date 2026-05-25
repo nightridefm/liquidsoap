@@ -585,7 +585,7 @@ let source_methods : source_meth list =
       value =
         (fun s ->
           val_fun [] (fun _ ->
-              s#abort_track;
+              s#skip_track;
               unit));
     };
     {

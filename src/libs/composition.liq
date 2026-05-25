@@ -123,9 +123,11 @@ source.composition.file(
             label=source.id(s),
             "Source left in the middle of a track: skipping current track"
           )
-          let {skip, clear_last_metadata} = source.methods(s)
+          let {skip, is_ready, generate_frame, clear_last_metadata} =
+            source.methods(s)
           clear_last_metadata()
           skip()
+          if is_ready() then generate_frame() end
         end,
     on_select = source.composition.default_on_select,
     track_sensitive = true,
