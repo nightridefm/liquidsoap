@@ -130,6 +130,20 @@ let mk_video_decoder ~width ~height ~stream ~field codec =
       | None -> failwith "Pixel format unknown!"
       | Some f -> f
   in
+  (* Pick an alpha-bearing target when the source carries alpha, so
+     swscale keeps the A plane instead of dropping it during the
+     conversion to Liquidsoap's canvas image. `Ffmpeg_utils.unpack_image`
+     already pattern-matches on the 4-plane case to build an
+     Image.YUV420.t with ~alpha populated, so the rest of the canvas
+     path (add, video.render, the alpha-aware operators) works for free
+     once the scaler emits 4 planes. *)
+  let target_pixel_format =
+    let desc = Avutil.Pixel_format.descriptor pixel_format in
+    if List.mem `Alpha desc.Avutil.Pixel_format.flags then
+      Ffmpeg_utils.liq_frame_pixel_format_with_alpha
+    else
+      Ffmpeg_utils.liq_frame_pixel_format
+  in
   let target_width = width in
   let target_height = height in
   let width = Avcodec.Video.get_width codec in
@@ -145,7 +159,7 @@ let mk_video_decoder ~width ~height ~stream ~field codec =
     in
     let scaler =
       Scaler.create [] width height pixel_format aw ah
-        Ffmpeg_utils.liq_frame_pixel_format
+        target_pixel_format
     in
     fun frame : Video.Canvas.Image.t ->
       let img =
