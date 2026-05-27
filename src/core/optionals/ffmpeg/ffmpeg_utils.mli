@@ -33,6 +33,7 @@ val liq_audio_sample_time_base : unit -> Avutil.rational
 val liq_video_sample_time_base : unit -> Avutil.rational
 val liq_frame_time_base : unit -> Avutil.rational
 val liq_frame_pixel_format : unit -> Avutil.Pixel_format.t
+val liq_frame_pixel_format_with_alpha : unit -> Avutil.Pixel_format.t
 val pixel_format : 'a Avcodec.Video.t -> string option -> Avutil.Pixel_format.t
 val pack_image : Image.YUV420.t -> (Image.Data.t * int) array
 

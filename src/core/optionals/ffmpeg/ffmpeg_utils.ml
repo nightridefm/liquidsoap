@@ -101,6 +101,15 @@ let liq_frame_time_base () =
 
 let liq_frame_pixel_format () = `Yuv420p
 
+(* Alpha-bearing variant of `liq_frame_pixel_format`. Targeted by the
+   ffmpeg internal video decoder's scaler when the SOURCE pixel format
+   carries an alpha channel (yuva*, rgba, bgra, ...), so swscale keeps
+   the A plane through to the resulting Image.YUV420.t instead of
+   dropping it. `unpack_image` below already pattern-matches the
+   4-plane case to populate the image's alpha field; this constant is
+   the other end of that wiring. *)
+let liq_frame_pixel_format_with_alpha () = `Yuva420p
+
 let pack_image f =
   let y, u, v = Image.YUV420.data f in
   let sy = Image.YUV420.y_stride f in
