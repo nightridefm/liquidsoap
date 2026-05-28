@@ -6,3 +6,5 @@ _tests
 .merlin
 *.install
 *.sw*
+# standalone C harness built from tests/Makefile (not via dune)
+tests/yuv420_simd_test
