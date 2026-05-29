@@ -969,10 +969,25 @@ let _ =
   Lang.add_builtin ~base:ffmpeg_filter "create"
     ~category:(`Source `FFmpegFilter)
     ~descr:"Configure and launch a filter graph"
-    [("", Lang.fun_t [(false, "", Graph.t)] univ_t, None, None)]
+    [
+      ( "hwaccel_device",
+        Lang.string_t,
+        Some (Lang.string ""),
+        Some
+          "When set (e.g. \"/dev/dri/renderD128\"), create a VAAPI hardware \
+           device and attach it to the graph so hardware filters such as \
+           `hwupload` can upload frames to a GPU surface. Empty disables \
+           hardware (software graph)." );
+      ("", Lang.fun_t [(false, "", Graph.t)] univ_t, None, None);
+    ]
     univ_t
     (fun p ->
       let fn = List.assoc "" p in
+      let hardware_device =
+        let device = Lang.to_string (List.assoc "hwaccel_device" p) in
+        if device = "" then None
+        else Some (Avutil.HwContext.create_device_context ~device `Vaapi)
+      in
       let config = Avfilter.init () in
       let graph =
         Avfilter.
@@ -1023,7 +1038,7 @@ let _ =
       Queue.push graph.init
         (Lazy.from_fun (fun () ->
              log#info "Initializing graph";
-             let filter = Avfilter.launch config in
+             let filter = Avfilter.launch ?hardware_device config in
              Avfilter.(
                List.iter
                  (fun (name, input) ->
