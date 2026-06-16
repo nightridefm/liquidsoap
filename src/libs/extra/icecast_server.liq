@@ -61,6 +61,20 @@ end
 settings.icecast.server.tls_transport := ("ssl", icecast.server.ssl_transport)
 %endif
 
+# Default muxer options applied when remuxing incoming streams via `copy_encoder`, keyed by container format name. Used to enable live/streaming-compatible output for formats that require explicit opt-in.
+# @flag extra
+# @category Source / Input / Active
+let settings.icecast.server.default_muxer_options =
+  settings.make(
+    description="Default muxer options applied when remuxing incoming streams, \
+     keyed by container format name. Used to enable live/streaming-compatible \
+     output for formats that require explicit opt-in.",
+    [
+      ("matroska", [("dash", "1"), ("live", "1")]),
+      ("webm", [("dash", "1"), ("live", "1")])
+    ]
+  )
+
 # @flag hidden
 def icecast.server.parse_headers(node) =
   # Defaults mirror icecast 2.5 behaviour. Access-Control-Allow-Origin is
@@ -364,8 +378,15 @@ def icecast.server.parser(path) =
     if
       null.defined(pidfile)
     then
+%ifdef settings.init.daemon
       settings.init.daemon.pidfile := true
       settings.init.daemon.pidfile.path := null.get(pidfile)
+%else
+      log.important(
+        label="icecast.server",
+        "Config option 'pidfile' is not supported"
+      )
+%endif
     end
 
     if
@@ -764,6 +785,7 @@ def icecast.server.default_prepare(
     transport,
     dumpfile,
     dedicated_encoder,
+    muxer_opts,
     streams = _,
     source_headers = _
   }
@@ -808,7 +830,7 @@ def icecast.server.default_prepare(
           dumpfile=dumpfile,
           dedicated_encoder=dedicated_encoder,
           format=mime_type ?? "",
-          copy_encoder(format),
+          copy_encoder(format, options=muxer_opts),
           default_source
         )
 
@@ -872,6 +894,7 @@ def icecast.server.source_manager(
   ~dedicated_encoder=false,
   ~x_forwarded_for_proxy_ips=null,
   ~x_forwarded_for=null,
+  ~format_options=null,
   ~global_headers,
   ~default_mount,
   ~mount_configs
@@ -1095,6 +1118,25 @@ def icecast.server.source_manager(
               list.filter(fun (l) -> l.ip != real_ip, listeners_ref())
           end
 
+          muxer_opts =
+            if
+              null.defined(format)
+            then
+              if
+                null.defined(format_options)
+              then
+                format_options_fn = null.get(format_options)
+                format_options_fn(null.get(format))
+              else
+                list.assoc(
+                  default=[],
+                  null.get(format),
+                  settings.icecast.server.default_muxer_options()
+                )
+              end
+            else
+              []
+            end
           prepare = icecast.server.default_prepare
           connector =
             prepare(
@@ -1110,7 +1152,8 @@ def icecast.server.source_manager(
                 port = port,
                 transport = transport,
                 dumpfile = mount_config.dump_file,
-                dedicated_encoder = dedicated_encoder
+                dedicated_encoder = dedicated_encoder,
+                muxer_opts = muxer_opts
               }
             )
           o =
@@ -1422,11 +1465,14 @@ def icecast.server.serve(
      class=empty>No active mounts.</p>';return;}const ids=new \
      Set(mounts.map(m=>m.mount));Array.from(el.children).forEach(c=>{if(!c.dataset.mount)c.remove();});Array.from(el.querySelectorAll('[data-mount]')).forEach(c=>{if(!ids.has(c.dataset.mount))c.remove();});mounts.forEach(m=>{let \
      card=el.querySelector('[data-mount=\"'+m.mount+'\"]');if(!card){card=document.createElement('div');card.className='card';card.dataset.mount=m.mount;card.innerHTML=`<div \
-     class=card-title>${m.mount}</div><div class=now-playing></div><div \
-     class=meta><div class=meta-item><span class=meta-label>Name</span><span \
-     class=dyn-name></span></div><div class=meta-item><span \
-     class=meta-label>Format</span><span class=dyn-format></span></div><div \
-     class=meta-item><span class=meta-label>Started</span><span \
+     class=card-title><a href='${m.mount}' target='_blank' rel='noopener \
+     noreferrer' \
+     style='color:inherit;text-decoration:none'>${m.mount}</a></div><div \
+     class=now-playing></div><div class=meta><div class=meta-item><span \
+     class=meta-label>Name</span><span class=dyn-name></span></div><div \
+     class=meta-item><span class=meta-label>Format</span><span \
+     class=dyn-format></span></div><div class=meta-item><span \
+     class=meta-label>Started</span><span \
      class=dyn-started></span></div></div><hr><div class=stats-row><div \
      class=stat><div class=stat-n dyn-listeners></div><div \
      class=stat-l>Listeners</div></div><div class=stat><div class=stat-n \
@@ -1546,6 +1592,7 @@ end
 # @param ~serve_html When provided, called with the stats list and must return an HTML string for the `/` endpoint.
 # @param ~x_forwarded_for_proxy_ips List of known reverse-proxy IPs. When set, the `X-Forwarded-For` header is walked right-to-left and the first non-proxy IP is used as the listener IP in stats. Use only when liquidsoap is behind a trusted reverse proxy.
 # @param ~x_forwarded_for Advanced: custom callback `({ip, headers, proxy_ips, protocol, uri}) -> string` to extract the real listener IP. When set, overrides the default `X-Forwarded-For` logic. `proxy_ips` in the record is populated from `x_forwarded_for_proxy_ips`.
+# @param ~format_options Callback `(string) -> [(string * string)]` that returns muxer options for a given container format name. When `null`, falls back to `settings.icecast.server.default_muxer_options`.
 # @callback on_connect Called when a source connects. Receives a record with mount, source, format, streams, and headers fields.
 # @callback on_disconnect Called when a source disconnects. Receives a record with a mount field.
 # @method stats Returns a list of `(mount, stats)` pairs. Each stats record contains: name, content_type, started, listeners, peak_listeners, and current_metadata.
@@ -1556,6 +1603,7 @@ def icecast.server(
   ~dedicated_encoder=false,
   ~x_forwarded_for_proxy_ips=null,
   ~x_forwarded_for=null,
+  ~format_options=null,
   ~config=null,
   ~serve=true,
   ~serve_auth=null,
@@ -1702,6 +1750,7 @@ def icecast.server(
       dedicated_encoder=dedicated_encoder,
       x_forwarded_for_proxy_ips=x_forwarded_for_proxy_ips,
       x_forwarded_for=x_forwarded_for,
+      format_options=format_options,
       global_headers=global_headers,
       default_mount=default_mount,
       mount_configs=mount_configs

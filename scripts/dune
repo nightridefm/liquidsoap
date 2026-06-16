@@ -1,11 +1,13 @@
 (executable
  (name gen_emacs_completion)
- (link_flags -cclib %{env:LIQ_LDFLAGS=})
+ (link_flags -cclib %{env:LIQUIDSOAP_LDFLAGS=})
  (libraries liquidsoap_runtime)
  (modules gen_emacs_completion))
 
 (rule
  (target liquidsoap-completions.el)
+ (enabled_if
+  (= %{context_name} default))
  (deps
   (source_tree ../src/libs)
   (:stdlib ../src/libs/stdlib.liq)
@@ -24,6 +26,8 @@
 (install
  (section share_root)
  (package liquidsoap-mode)
+ (enabled_if
+  (= %{context_name} default))
  (files
   (liquidsoap-mode.el as emacs/site-lisp/liquidsoap-mode.el)
   (liquidsoap-completion.el as emacs/site-lisp/liquidsoap-completion.el)

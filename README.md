@@ -30,9 +30,35 @@ Copyright 2003-2026 Savonet team
 | IRC (deprecated)          | #savonet on [irc.libera.chat](https://libera.chat/) (w/ discord bridge) |
 | Mailing list (deprecated) | savonet-users@lists.sourceforge.net                                     |
 
-## Installation
+## Installation and Building from Source
 
-See the instructions [here](https://www.liquidsoap.info/doc.html?path=install.html).
+Full installation and build instructions are available [here](https://www.liquidsoap.info/doc.html?path=install.html). For quick reference:
+
+Liquidsoap uses [dune](https://dune.build) as its build system and [opam](https://opam.ocaml.org) for package management. OCaml ≥ 4.14 and dune ≥ 3.23 are required.
+
+### Developer build
+
+Install dependencies, then build everything directly with dune:
+
+```sh
+opam install --deps-only ./opam/liquidsoap.opam ./opam/liquidsoap-lang.opam
+dune build
+```
+
+The `./liquidsoap` wrapper at the repo root runs the binary straight from the build tree with the standard library pointed at `src/libs/`, so no install step is needed:
+
+```sh
+./liquidsoap your_script.liq
+```
+
+### Install from source via opam
+
+To register the local source tree with opam without installing it yet (useful when you want to test against local changes before publishing):
+
+```sh
+opam pin -ny .
+opam install liquidsoap
+```
 
 ## Release Details
 
@@ -40,7 +66,7 @@ Current release status by version:
 | Branch | Latest release | Supported | Rolling Release |
 | --------|----------------|-----------|-----------------|
 | `2.5.x` | 🚧 | 🚧 | [main](https://github.com/savonet/liquidsoap) (docker: `savonet/liquidsoap`) |
-| `2.4.x` | [2.4.4](https://github.com/savonet/liquidsoap/releases/tag/v2.4.4) (docker: `savonet/liquidsoap:v2.4.4`)| ✅ | [2.4.x](https://github.com/savonet/liquidsoap/releases/tag/rolling-release-v2.4.x) (docker: `savonet/liquidsoap:rolling-release-v2.4.x`) |
+| `2.4.x` | [2.4.5](https://github.com/savonet/liquidsoap/releases/tag/v2.4.5) (docker: `savonet/liquidsoap:v2.4.5`)| ✅ | [2.4.x](https://github.com/savonet/liquidsoap/releases/tag/rolling-release-v2.4.x) (docker: `savonet/liquidsoap:rolling-release-v2.4.x`) |
 | `2.3.x` |[2.3.3](https://github.com/savonet/liquidsoap/releases/tag/v2.3.3) (docker: `savonet/liquidsoap:v2.3.3`) | ❌ | [2.3.x](https://github.com/savonet/liquidsoap/releases/tag/rolling-release-v2.3.x) (docker: `savonet/liquidsoap:rolling-release-v2.3.x`) |
 
 ### Versions

@@ -8,32 +8,19 @@ export CPU_CORES
 
 eval "$(opam config env)"
 
-echo "::group::Preparing bindings"
-
-cd /tmp/liquidsoap-full
-
-git remote set-url origin https://github.com/savonet/liquidsoap-full.git
-git fetch --recurse-submodules=no && git checkout origin/master -- Makefile.git
-git reset --hard
-git pull
-
-git pull
-make clean
-make public
-make update
-
-echo "::endgroup::"
+export LIQUIDSOAP_INSTALL_NO_OPTIONAL_FAIL=true
 
 echo "::group::Checking out CI commit"
 
-cd /tmp/liquidsoap-full/liquidsoap
+if [ -d /tmp/liquidsoap ]; then
+  cd /tmp/liquidsoap
+else
+  git clone --depth 1 https://github.com/savonet/liquidsoap.git /tmp/liquidsoap
+  cd /tmp/liquidsoap
+fi
 
-git fetch origin "$GITHUB_SHA"
+git fetch --depth 1 origin "$GITHUB_SHA"
 git checkout "$GITHUB_SHA"
-mv .github /tmp
-rm -rf ./*
-mv /tmp/.github .
-git reset --hard
 
 echo "::endgroup::"
 
@@ -41,29 +28,17 @@ echo "::group::Setting up specific dependencies"
 
 opam update
 
-# Pin ocaml-xiph packages individually, excluding deprecated theora and speex,
-# then reinstall them. On Debian, PKG_CONFIG_PATH picks up the static FFmpeg
-# packages; --no-depexts skips system package checks.
 export PKG_CONFIG_PATH=/usr/local/lib/pkgconfig:/usr/share/pkgconfig/pkgconfig
-cd /tmp/liquidsoap-full
-for pkg in ogg vorbis opus flac; do
-  opam pin -y -n add "$pkg" ./ocaml-xiph
-done
-opam install -y --no-depexts ogg vorbis opus flac
 
 opam pin -y add re 1.13.2
-# tsdl-ttf 0.7 regressed the Linux dlopen path back to the unversioned
-# libSDL2_ttf.so, which is only in the dev package on Alpine. Pin to 0.6
-# until https://github.com/sanette/tsdl-ttf/issues/14 is resolved.
-opam pin -y add tsdl-ttf 0.6
+if [ -z "${SKIP_SDL}" ]; then
+  # tsdl-ttf 0.7 regressed the Linux dlopen path back to the unversioned
+  # libSDL2_ttf.so, which is only in the dev package on Alpine. Pin to 0.6
+  # until https://github.com/sanette/tsdl-ttf/issues/14 is resolved.
+  opam pin -y add tsdl-ttf 0.6
+fi
 opam upgrade -y posix-socket
-opam install -y domain_shims syslog
-
-cd /tmp/liquidsoap-full/liquidsoap
-
-./.github/scripts/checkout-deps.sh
-
-cd /tmp/liquidsoap-full
+opam install -y domain_shims syslog dune.3.23.1
 
 echo "::endgroup::"
 
@@ -75,30 +50,6 @@ echo "::endgroup::"
 
 echo "::group::Compiling"
 
-cd /tmp/liquidsoap-full
-
-test -f PACKAGES || cp PACKAGES.default PACKAGES
-sed -i '/ocaml-xiph/d' PACKAGES
-
-# Workaround
-touch liquidsoap/configure
-
-./configure --prefix=/usr \
-  --includedir="\${prefix}/include" \
-  --mandir="\${prefix}/share/man" \
-  --infodir="\${prefix}/share/info" \
-  --sysconfdir=/etc \
-  --localstatedir=/var \
-  --with-camomile-data-dir=/usr/share/liquidsoap/camomile \
-  CFLAGS=-g
-
-# Workaround
-rm liquidsoap/configure
-
-OCAMLPATH="$(cat .ocamlpath)"
-export OCAMLPATH
-
-cd /tmp/liquidsoap-full/liquidsoap
 dune build --profile=release
 
 echo "::endgroup::"

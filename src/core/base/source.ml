@@ -37,7 +37,10 @@ type sync = [ `Auto | `CPU | `None ]
 module SourceSync = Clock.MkSyncSource (struct
   type t = < id : string >
 
+  let time_implementation _ = Clock.time_implementation ()
   let to_string s = Printf.sprintf "source(id=%s)" s#id
+  let latency _ = Clock.conf_latency#get
+  let max_latency _ = Clock.conf_max_latency#get
 end)
 
 let sync_source_changed a b =
@@ -87,7 +90,6 @@ type on_frame =
   | `After_frame of after_frame_payload -> unit ]
 
 let source_log = Log.make ["source"]
-let finalise s = source_log#info "Source %s is collected." s#id
 
 let check_sleep ~activations ~s =
  fun src ->
@@ -98,9 +100,16 @@ let check_sleep ~activations ~s =
       src#id s#id;
     s#sleep src)
 
+let on_finalize ~on_collect id =
+ fun () ->
+  List.iter (fun fn -> fn ()) !on_collect;
+  source_log#info "Source %s is collected." !id
+
 class virtual operator ?(stack = []) ?clock ~name sources =
   let frame_type = Type.var () in
   let clock = match clock with Some c -> c | None -> Clock.create ~stack () in
+  let id = ref (Lang_string.generate_id ~category:"source" name) in
+  let on_collect = ref [] in
   object (self)
     (** Monitoring *)
     val mutable watchers = []
@@ -151,8 +160,7 @@ class virtual operator ?(stack = []) ?clock ~name sources =
     val mutable log = source_log
     method private create_log = log <- Log.make [self#id]
     method log = log
-    val mutable id = Lang_string.generate_id ~category:"source" name
-    method id = id
+    method id = !id
 
     method set_id ?(force = true) s =
       let s =
@@ -162,7 +170,7 @@ class virtual operator ?(stack = []) ?clock ~name sources =
           s
       in
       if force && s <> self#id then (
-        id <- Lang_string.generate_id ~category:"source" s;
+        id := Lang_string.generate_id ~category:"source" s;
 
         (* Sometimes the ID is changed during initialization, in order to make it
          equal to the server name, which is only registered at initialization
@@ -347,7 +355,7 @@ class virtual operator ?(stack = []) ?clock ~name sources =
     method wake_up src =
       let activation =
         object
-          method id = src#id
+          method id = !id
         end
       in
       Gc.finalise (check_sleep ~activations ~s:self) activation;
@@ -410,8 +418,10 @@ class virtual operator ?(stack = []) ?clock ~name sources =
         | 0, _, _ -> self#actual_sleep
         | _ -> ()
 
+    method on_collect fn = on_collect := fn :: !on_collect
+
     initializer
-      Gc.finalise finalise self;
+      Gc.finalise_last (on_finalize ~on_collect id) self;
       self#on_sleep (fun () ->
           sources <-
             List.map

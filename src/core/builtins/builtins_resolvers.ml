@@ -123,6 +123,7 @@ let _ =
       Lang.string (Playlist_parser.get_file ?pwd uri))
 
 let add_playlist_parser ~format name (parser : Playlist_parser.parser) =
+  let log = Log.make ["playlist"; "parser"] in
   let return_t = Lang.list_t (Lang.product_t Lang.metadata_t Lang.string_t) in
   Lang.add_builtin ~base:Builtins_sys.playlist_parse name ~category:`Liquidsoap
     ~descr:(Printf.sprintf "Parse %s playlists" format)
@@ -137,12 +138,19 @@ let add_playlist_parser ~format name (parser : Playlist_parser.parser) =
     (fun p ->
       let uri = Lang.to_string (List.assoc "" p) in
       let pwd = Lang.to_valued_option Lang.to_string (List.assoc "pwd" p) in
-      let entries = parser ?pwd uri in
-      Lang.list
-        (List.map
-           (fun (metadata, uri) ->
-             Lang.product (Lang.metadata_list metadata) (Lang.string uri))
-           entries))
+      match parser ?pwd uri with
+        | entries ->
+            Lang.list
+              (List.map
+                 (fun (metadata, uri) ->
+                   Lang.product (Lang.metadata_list metadata) (Lang.string uri))
+                 entries)
+        | exception exn ->
+            let bt = Printexc.get_backtrace () in
+            Utils.log_exception ~log ~bt
+              (Printf.sprintf "Error while parsing %s playlist: %s" format
+                 (Printexc.to_string exn));
+            Lang.list [])
 
 let _ =
   let playlist_t = Lang.list_t (Lang.product_t Lang.metadata_t Lang.string_t) in

@@ -1,0 +1,71 @@
+name: Synced push
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "src/modules/synced/**"
+  workflow_dispatch:
+    inputs:
+      modules:
+        description: "Space-separated list of modules to sync (leave empty for all)"
+        required: false
+        default: ""
+
+jobs:
+  synced-push:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Push synced modules
+        env:
+          GH_TOKEN: ${{ secrets.SUBTREE_PUSH_TOKEN }}
+        run: |
+          pr_number=$(git log -1 --pretty=format:"%s" | grep -oP '\(#\K[0-9]+' | head -1)
+          if [ -z "$pr_number" ]; then
+            pr_number=$(gh api /repos/savonet/liquidsoap/commits/${{ github.sha }}/pulls --jq '.[0].number // empty')
+          fi
+
+          selected_modules="${{ inputs.modules }}"
+
+          for dir in src/modules/synced/*/; do
+            name=$(basename "$dir")
+
+            if [ -n "$selected_modules" ]; then
+              echo "$selected_modules" | tr ' ' '\n' | grep -qx "$name" || continue
+            elif [ "${{ github.event_name }}" = "push" ] && git diff --quiet ${{ github.event.before }} HEAD -- "src/modules/synced/$name/"; then
+              continue
+            fi
+
+            upstream="https://x-access-token:${GH_TOKEN}@github.com/savonet/ocaml-$name"
+            git clone "$upstream" /tmp/synced-$name
+            cd /tmp/synced-$name
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+
+            rsync -a --delete --exclude='.git' "$GITHUB_WORKSPACE/src/modules/synced/$name/" .
+            git add -A
+            if ! git diff --cached --quiet; then
+              git commit -m "Synced from savonet/liquidsoap@${{ github.sha }}"
+            fi
+
+            git push origin main
+
+            if [ -n "$pr_number" ]; then
+              mirror_branch="mirror/pr-${pr_number}"
+              if git ls-remote --exit-code origin "refs/heads/$mirror_branch" > /dev/null 2>&1; then
+                mirror_pr=$(gh pr list --repo "savonet/ocaml-$name" --head "$mirror_branch" --json number --jq '.[0].number // empty')
+                if [ -n "$mirror_pr" ]; then
+                  gh pr close --repo "savonet/ocaml-$name" "$mirror_pr" --comment "Merged in savonet/liquidsoap@${{ github.sha }}" || true
+                fi
+                git push origin --delete "$mirror_branch" || true
+              fi
+            fi
+
+            cd -
+          done

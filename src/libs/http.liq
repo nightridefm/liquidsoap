@@ -851,6 +851,7 @@ let settings.http.mime.extnames =
       ("application/x-cue", ".cue"),
       ("application/x-ogg", ".ogg"),
       ("application/xspf+xml", ".xspf"),
+      ("audio/aiff", ".aiff"),
       ("audio/flac", ".flac"),
       ("audio/mp3", ".mp3"),
       ("audio/mp4", ".mp4"),
@@ -860,11 +861,13 @@ let settings.http.mime.extnames =
       ("audio/vnd.wave", ".wav"),
       ("audio/wav", ".wav"),
       ("audio/wave", ".wav"),
+      ("audio/x-aiff", ".aiff"),
       ("audio/x-flac", ".flac"),
       ("audio/x-mpegurl", ".m3u"),
       ("audio/x-ogg", ".ogg"),
       ("audio/x-scpls", ".pls"),
       ("audio/x-wav", ".wav"),
+      ("audio/x-wavpack", ".wv"),
       ("image/bmp", ".bmp"),
       ("image/jpeg", ".jpg"),
       ("image/png", ".png"),
@@ -882,9 +885,10 @@ let file.mime = ()
 # Return the file extension associated with the given
 # content-type if it is known.
 # @category File
-def file.mime.extension(content_type) =
-  extnames = settings.http.mime.extnames()
-  extname = extnames[content_type]
+# @param ~mime_types_extnames Mime type to file extension mappings. Defaults to `settings.http.mime.extnames`.
+def file.mime.extension(~mime_types_extnames=null, content_type) =
+  extnames = mime_types_extnames ?? settings.http.mime.extnames()
+  extname = extnames[string.case(lower=true, content_type)]
   extname == "" ? null : extname
 end
 

@@ -17,7 +17,7 @@ jobs:
   update_doc:
     runs-on: depot-ubuntu-24.04-4
     container:
-      image: savonet/liquidsoap-ci:debian_trixie@sha256:dc7cb6d629091da7cc938e7e3d2d88b3830894c85d0700065c73cceeca5cf5ab
+      image: ghcr.io/savonet/liquidsoap:ci-v2-debian_trixie-5.4.0@sha256:1521b53591f846a76affe11cddc69402de41936523339c3fafa8c248fa396f5d
       options: --user root -v ${{ github.workspace }}/${{ github.run_number }}:/tmp/${{ github.run_number }}
     env:
       HOME: /home/opam
@@ -32,17 +32,18 @@ jobs:
           path: /tmp/${{ github.run_number }}/js-artifacts
       - name: Checkout code
         run: |
-          cd /tmp/liquidsoap-full/liquidsoap
-          rm -rf doc/content/build.md doc/content/install.md _build/default/src/js
-          sudo -u opam -E git remote set-url origin https://github.com/savonet/liquidsoap.git
-          sudo -u opam -E git fetch origin ${{ inputs.sha }}
-          sudo -u opam -E git checkout ${{ inputs.sha }}
+          sudo -u opam git clone --depth 1 https://github.com/savonet/liquidsoap.git /tmp/liquidsoap
+          cd /tmp/liquidsoap
+          sudo -u opam git fetch --depth 1 origin ${{ inputs.sha }}
+          sudo -u opam git checkout ${{ inputs.sha }}
+          sudo -u opam git clone --depth 1 https://github.com/savonet/liquidsoap-full.git /tmp/liquidsoap-full
+          rmdir /tmp/liquidsoap-full/liquidsoap
+          ln -s /tmp/liquidsoap /tmp/liquidsoap-full/liquidsoap
       - name: Build doc
         env:
           CPU_CORES: ${{ steps.cpu_cores.outputs.count }}
         run: |
-          cd /tmp/liquidsoap-full/liquidsoap
-          sudo -u opam -E ./.github/scripts/add-local-opam-packages.sh
+          cd /tmp/liquidsoap
           sudo -u opam -E ./.github/scripts/build-posix.sh "${{ steps.cpu_cores.outputs.count }}"
           sudo -u opam -E ./.github/scripts/build-doc.sh
           mkdir -p /tmp/${{ github.run_number }}/odoc

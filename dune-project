@@ -1,11 +1,11 @@
-(lang dune 3.18)
+(lang dune 3.23)
 (using menhir 2.1)
 (using dune_site 0.1)
 (name liquidsoap)
 (source (github savonet/liquidsoap))
 (license GPL-2.0-or-later)
-(authors "The Savonet Team <savonet-users@lists.sourceforge.net>")
-(maintainers "The Savonet Team <savonet-users@lists.sourceforge.net>")
+(authors "The Savonet Team <contact@liquidsoap.info>")
+(maintainers "The Savonet Team <contact@liquidsoap.info>")
 (homepage "https://github.com/savonet/liquidsoap")
 (bug_reports "https://github.com/savonet/liquidsoap/issues")
 (maintenance_intent "(latest)")
@@ -26,18 +26,19 @@
     curl
     (camomile (>= 2.0.0))
     uri
-    menhirLib
     domain_shims
     (mem_usage (>= 0.1.1))
     (metadata (>= 0.3.0))
     magic-mime
+    menhir
     dune-build-info
+    xmlm
     (liquidsoap-lang (= :version))
     (ppx_string :build))
   (depopts
     alsa
     ao
-    bjack
+    jack
     camlimages
     ctypes-foreign
     dssi
@@ -80,7 +81,6 @@
  (conflicts
     (alsa (< 0.3.0))
     (ao (< 0.2.0))
-    (bjack (< 0.1.3))
     (camomile (< 1.0.0))
     (dssi (< 0.1.3))
     (faad (< 0.5.0))
@@ -155,6 +155,7 @@
 
 (package
    (name liquidsoap-mode)
+   (allow_empty)
    (depends (liquidsoap (= :version)))
    (synopsis "Liquidosap emacs mode")
 )

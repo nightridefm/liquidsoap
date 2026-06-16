@@ -1,0 +1,16 @@
+(executable
+ (name gen_examples)
+ (modules gen_examples))
+
+(rule
+ (target examples.inc)
+ (action
+  (with-stdout-to
+   examples.inc
+   (run
+    ./gen_examples.exe
+    %{lib-available:mm.alsa}
+    %{lib-available:mm.mad}
+    %{lib-available:mm.oss}
+    %{lib-available:mm.ao}
+    %{lib-available:graphics}))))

@@ -7,14 +7,12 @@ ARCH=$(dpkg --print-architecture)
 COMMIT_SHORT=$(echo "${GITHUB_SHA}" | cut -c-7)
 
 export DEBFULLNAME="The Savonet Team"
-export DEBEMAIL="savonet-users@lists.sourceforge.net"
+export DEBEMAIL="contact@liquidsoap.info"
 export LIQUIDSOAP_BUILD_TARGET=posix
 
-cd /tmp/liquidsoap-full/liquidsoap
+cd /tmp/liquidsoap
 
 eval "$(opam config env)"
-OCAMLPATH="$(cat ../.ocamlpath)"
-export OCAMLPATH
 
 LIQ_VERSION=$(opam show -f version ./opam/liquidsoap.opam | cut -d'-' -f 1)
 LIQ_TAG=$(echo "${DOCKER_TAG}" | sed -e 's#_#-#g')
@@ -49,24 +47,25 @@ if [ "${PLATFORM}" = "amd64" ]; then
 
   ./liquidsoap --build-config > "${LIQ_TMP_DIR}/${LIQ_PACKAGE}_${LIQ_VERSION}-${LIQ_TAG}-${DEB_RELEASE}.config"
 
-  mv /tmp/liquidsoap-full/*.deb "${LIQ_TMP_DIR}"
+  mv /tmp/*.deb "${LIQ_TMP_DIR}"
 fi
 
 echo "::endgroup::"
 
+if [ -n "${SKIP_MINIMAL}" ]; then
+  echo "basename=${LIQ_PACKAGE}_${LIQ_VERSION}-${LIQ_TAG}-${DEB_RELEASE}_$ARCH" >> "${GITHUB_OUTPUT}"
+  exit 0
+fi
+
 echo "::group:: build ${LIQ_PACKAGE}-minimal.."
+
+export LIQUIDSOAP_MINIMAL_EXCLUDE_DEPS="$MINIMAL_EXCLUDE_DEPS"
 
 # shellcheck disable=SC2086
 opam remove -y --verbose --assume-depexts $MINIMAL_EXCLUDE_DEPS
 
-cd /tmp/liquidsoap-full
-make clean
-cp PACKAGES.minimal-build PACKAGES
-rm .ocamlpath
-cd liquidsoap
+cd /tmp/liquidsoap
 ./.github/scripts/build-posix.sh 1
-OCAMLPATH="$(cat ../.ocamlpath)"
-export OCAMLPATH
 
 rm -rf debian
 
@@ -94,7 +93,7 @@ if [ "${PLATFORM}" = "amd64" ]; then
   echo "::endgroup::"
 fi
 
-mv /tmp/liquidsoap-full/*.deb "${LIQ_TMP_DIR}"
+mv /tmp/*.deb "${LIQ_TMP_DIR}"
 
 {
   echo "basename=${LIQ_PACKAGE}_${LIQ_VERSION}-${LIQ_TAG}-${DEB_RELEASE}_$ARCH"
