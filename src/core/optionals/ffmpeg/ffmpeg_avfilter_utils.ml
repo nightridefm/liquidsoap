@@ -33,8 +33,8 @@ module Fps = struct
     | `Filter { time_base } -> time_base
     | `Pass_through time_base -> time_base
 
-  let init ?start_pts ~width ~height ~pixel_format ~time_base ?pixel_aspect
-      ?source_fps ~target_fps () =
+  let init ?start_pts ~width ~height ~pixel_format ?color_space ?color_range
+      ~time_base ?pixel_aspect ?source_fps ~target_fps () =
     let config = Avfilter.init () in
     let _buffer =
       let args =
@@ -54,6 +54,23 @@ module Fps = struct
           | Some fps ->
               `Pair ("frame_rate", `Rational { Avutil.num = fps; den = 1 })
               :: args
+      in
+      (* Tag the buffersrc with the source colorspace/range. Without these the
+         buffersrc is born unknown/unknown; the first frame (tagged, e.g.,
+         bt709/tv) then trips libavfilter's "Changing video frame properties on
+         the fly" reconfiguration on every freshly-built graph. Matching them up
+         front keeps each graph stable for its whole (per-clip) life. *)
+      let args =
+        match color_space with
+          | None -> args
+          | Some cs ->
+              `Pair ("colorspace", `String (Avutil.Color_space.name cs)) :: args
+      in
+      let args =
+        match color_range with
+          | None -> args
+          | Some cr ->
+              `Pair ("range", `String (Avutil.Color_range.name cr)) :: args
       in
       Avfilter.attach ~name:"buffer" ~args Avfilter.buffer config
     in
@@ -119,14 +136,14 @@ module Fps = struct
     { input; output; time_base }
 
   (* Source fps is not always known so it is optional here. *)
-  let init ?start_pts ~width ~height ~pixel_format ~time_base ?pixel_aspect
-      ?source_fps ~target_fps () =
+  let init ?start_pts ~width ~height ~pixel_format ?color_space ?color_range
+      ~time_base ?pixel_aspect ?source_fps ~target_fps () =
     match source_fps with
       | Some f when f = target_fps -> `Pass_through time_base
       | _ ->
           `Filter
-            (init ?start_pts ~width ~height ~pixel_format ~time_base
-               ?pixel_aspect ?source_fps ~target_fps ())
+            (init ?start_pts ~width ~height ~pixel_format ?color_space
+               ?color_range ~time_base ?pixel_aspect ?source_fps ~target_fps ())
 
   let rec flush cb output =
     try

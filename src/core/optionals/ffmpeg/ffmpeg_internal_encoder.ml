@@ -411,22 +411,27 @@ let mk_video ~pos ~on_keyframe ~mode ~codec ~params ~options ~field output =
 
   let start_pts = ref 0L in
 
-  let mk_converter ~pixel_format ~time_base ~stream_idx () =
+  let mk_converter ~pixel_format ~color_space ~color_range ~time_base
+      ~stream_idx () =
     let c =
       Ffmpeg_avfilter_utils.Fps.init ~start_pts:!start_pts ~width:target_width
-        ~height:target_height ~pixel_format ~time_base ~pixel_aspect ~target_fps
-        ()
+        ~height:target_height ~pixel_format ~color_space ~color_range ~time_base
+        ~pixel_aspect ~target_fps ()
     in
     converter := Some (pixel_format, time_base, stream_idx, c);
     c
   in
 
-  let get_converter ~pixel_format ~time_base ~stream_idx () =
+  let get_converter ~pixel_format ~color_space ~color_range ~time_base
+      ~stream_idx () =
     match !converter with
-      | None -> mk_converter ~stream_idx ~pixel_format ~time_base ()
+      | None ->
+          mk_converter ~stream_idx ~pixel_format ~color_space ~color_range
+            ~time_base ()
       | Some (p, t, i, _) when (p, t, i) <> (pixel_format, time_base, stream_idx)
         ->
-          mk_converter ~stream_idx ~pixel_format ~time_base ()
+          mk_converter ~stream_idx ~pixel_format ~color_space ~color_range
+            ~time_base ()
       | Some (_, _, _, c) -> c
   in
 
@@ -449,6 +454,8 @@ let mk_video ~pos ~on_keyframe ~mode ~codec ~params ~options ~field output =
     let converter =
       get_converter ~time_base ~stream_idx
         ~pixel_format:(Avutil.Video.frame_get_pixel_format frame)
+        ~color_space:(Avutil.Video.frame_get_color_space frame)
+        ~color_range:(Avutil.Video.frame_get_color_range frame)
         ()
     in
     let time_base = Ffmpeg_avfilter_utils.Fps.time_base converter in

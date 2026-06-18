@@ -30,6 +30,8 @@ module Fps : sig
     width:int ->
     height:int ->
     pixel_format:Avutil.Pixel_format.t ->
+    ?color_space:Avutil.Color_space.t ->
+    ?color_range:Avutil.Color_range.t ->
     time_base:Avutil.rational ->
     ?pixel_aspect:Avutil.rational ->
     ?source_fps:int ->
