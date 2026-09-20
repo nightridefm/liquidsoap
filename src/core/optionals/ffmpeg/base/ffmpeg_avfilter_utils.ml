@@ -34,7 +34,7 @@ module Fps = struct
     | `Pass_through time_base -> time_base
 
   let init ?start_pts ~width ~height ~pixel_format ~time_base ?pixel_aspect
-      ?source_fps ?color_range ~target_fps () =
+      ?source_fps ?color_space ?color_range ~target_fps () =
     let config = Avfilter.init () in
     let _buffer =
       let args =
@@ -53,6 +53,18 @@ module Fps = struct
           | None -> args
           | Some cr ->
               `Pair ("range", `String (Avutil.Color_range.name cr)) :: args
+      in
+      (* Same reason as `range` above: a buffersrc born with an unknown
+         colorspace while the frames arriving carry one (bt709, say) trips
+         libavfilter's "Changing video frame properties on the fly"
+         reconfiguration, which inserts a redundant scale/format converter into
+         a graph that was fine. Tag it up front so each graph is stable for its
+         whole life. *)
+      let args =
+        match color_space with
+          | None -> args
+          | Some cs ->
+              `Pair ("colorspace", `String (Avutil.Color_space.name cs)) :: args
       in
       let args =
         match source_fps with
@@ -126,13 +138,14 @@ module Fps = struct
 
   (* Source fps is not always known so it is optional here. *)
   let init ?start_pts ~width ~height ~pixel_format ~time_base ?pixel_aspect
-      ?source_fps ?color_range ~target_fps () =
+      ?source_fps ?color_space ?color_range ~target_fps () =
     match source_fps with
       | Some f when f = target_fps -> `Pass_through time_base
       | _ ->
           `Filter
             (init ?start_pts ~width ~height ~pixel_format ~time_base
-               ?pixel_aspect ?source_fps ?color_range ~target_fps ())
+               ?pixel_aspect ?source_fps ?color_space ?color_range ~target_fps
+               ())
 
   let rec flush cb output =
     try

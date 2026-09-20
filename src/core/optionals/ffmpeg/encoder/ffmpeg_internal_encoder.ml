@@ -442,23 +442,34 @@ let mk_video ~pos ~on_keyframe ~mode ~codec ~params ~options ~field output =
 
   let start_pts = ref 0L in
 
-  let mk_converter ~pixel_format ~time_base ~stream_idx () =
+  let mk_converter ~pixel_format ~color_space ~color_range ~time_base
+      ~stream_idx () =
     let c =
       Ffmpeg_avfilter_utils.Fps.init ~start_pts:!start_pts ~width:target_width
-        ~height:target_height ~pixel_format ~time_base ~pixel_aspect ~target_fps
-        ()
+        ~height:target_height ~pixel_format ?color_space ?color_range ~time_base
+        ~pixel_aspect ~target_fps ()
     in
-    converter := Some (pixel_format, time_base, stream_idx, c);
+    converter :=
+      Some (pixel_format, color_space, color_range, time_base, stream_idx, c);
     c
   in
 
-  let get_converter ~pixel_format ~time_base ~stream_idx () =
+  (* The colour tags are part of the key, not just of the construction: a graph
+     built for one clip's colorspace and then fed another's is exactly the
+     on-the-fly reconfiguration the tags exist to avoid. The raw encoder path
+     takes time_base and stream_idx per source file, so this is reachable
+     whenever a rotation changes colour without changing either. *)
+  let get_converter ~pixel_format ~color_space ~color_range ~time_base
+      ~stream_idx () =
+    let key = (pixel_format, color_space, color_range, time_base, stream_idx) in
     match !converter with
-      | None -> mk_converter ~stream_idx ~pixel_format ~time_base ()
-      | Some (p, t, i, _) when (p, t, i) <> (pixel_format, time_base, stream_idx)
-        ->
-          mk_converter ~stream_idx ~pixel_format ~time_base ()
-      | Some (_, _, _, c) -> c
+      | None ->
+          mk_converter ~stream_idx ~pixel_format ~color_space ~color_range
+            ~time_base ()
+      | Some (p, cs, cr, t, i, _) when (p, cs, cr, t, i) <> key ->
+          mk_converter ~stream_idx ~pixel_format ~color_space ~color_range
+            ~time_base ()
+      | Some (_, _, _, _, _, c) -> c
   in
 
   let write_frame ~time_base frame =
@@ -477,9 +488,23 @@ let mk_video ~pos ~on_keyframe ~mode ~codec ~params ~options ~field output =
 
   let fps_converter ~stream_idx ~time_base frame =
     let converter =
+      (* `Reserved cannot be set as an ffmpeg option (see
+         Avutil.add_video_opts); an unspecified colorspace is what the
+         buffersrc defaults to anyway, so passing it through is a no-op.
+         color_range follows the decoder's idiom for the same thing. *)
+      let color_space =
+        match Avutil.Video.frame_get_color_space frame with
+          | `Reserved -> None
+          | cs -> Some cs
+      in
+      let color_range =
+        match Avutil.Video.frame_get_color_range frame with
+          | `Unspecified -> None
+          | cr -> Some cr
+      in
       get_converter ~time_base ~stream_idx
         ~pixel_format:(Avutil.Video.frame_get_pixel_format frame)
-        ()
+        ~color_space ~color_range ()
     in
     let time_base = Ffmpeg_avfilter_utils.Fps.time_base converter in
     Ffmpeg_avfilter_utils.Fps.convert converter frame (write_frame ~time_base)
@@ -488,7 +513,7 @@ let mk_video ~pos ~on_keyframe ~mode ~codec ~params ~options ~field output =
   let flush () =
     match !converter with
       | None -> ()
-      | Some (_, _, _, converter) ->
+      | Some (_, _, _, _, _, converter) ->
           let time_base = Ffmpeg_avfilter_utils.Fps.time_base converter in
           Ffmpeg_avfilter_utils.Fps.eof converter (write_frame ~time_base)
   in
