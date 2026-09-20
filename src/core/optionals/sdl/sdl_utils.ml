@@ -165,6 +165,59 @@ module Surface = struct
                 done
               done;
               Sdl.unlock_surface surface
+          (* SDL_image hands back ABGR8888 for an RGBA PNG on a little-endian
+             host - the single most common way a cover image arrives - and
+             RGBA8888 for some builds. Neither was handled, so every such
+             image failed with "img_of_surface: unhandled format 376840196"
+             (0x16762004 = SDL_PIXELFORMAT_ABGR8888) and fell through to the
+             next decoder.
+
+             Byte order is the mirror of the argb8888 case above. ABGR8888 is
+             the u32 0xAABBGGRR, so little-endian memory reads R,G,B,A and
+             big-endian reads A,B,G,R. RGBA8888 is the u32 0xRRGGBBAA, which
+             is the same two orders swapped. *)
+          | fmt when fmt = Sdl.Pixel.format_abgr8888 ->
+              assert (Sdl.lock_surface surface = Ok ());
+              let pix = Sdl.get_surface_pixels surface Bigarray.Int8_unsigned in
+              for j = 0 to height - 1 do
+                for i = 0 to width - 1 do
+                  let r, g, b, a =
+                    if Sys.big_endian then
+                      ( pix.{(j * pitch) + (4 * i) + 3},
+                        pix.{(j * pitch) + (4 * i) + 2},
+                        pix.{(j * pitch) + (4 * i) + 1},
+                        pix.{(j * pitch) + (4 * i) + 0} )
+                    else
+                      ( pix.{(j * pitch) + (4 * i) + 0},
+                        pix.{(j * pitch) + (4 * i) + 1},
+                        pix.{(j * pitch) + (4 * i) + 2},
+                        pix.{(j * pitch) + (4 * i) + 3} )
+                  in
+                  Image.YUV420.set_pixel_rgba img i j (r, g, b, a)
+                done
+              done;
+              Sdl.unlock_surface surface
+          | fmt when fmt = Sdl.Pixel.format_rgba8888 ->
+              assert (Sdl.lock_surface surface = Ok ());
+              let pix = Sdl.get_surface_pixels surface Bigarray.Int8_unsigned in
+              for j = 0 to height - 1 do
+                for i = 0 to width - 1 do
+                  let r, g, b, a =
+                    if Sys.big_endian then
+                      ( pix.{(j * pitch) + (4 * i) + 0},
+                        pix.{(j * pitch) + (4 * i) + 1},
+                        pix.{(j * pitch) + (4 * i) + 2},
+                        pix.{(j * pitch) + (4 * i) + 3} )
+                    else
+                      ( pix.{(j * pitch) + (4 * i) + 3},
+                        pix.{(j * pitch) + (4 * i) + 2},
+                        pix.{(j * pitch) + (4 * i) + 1},
+                        pix.{(j * pitch) + (4 * i) + 0} )
+                  in
+                  Image.YUV420.set_pixel_rgba img i j (r, g, b, a)
+                done
+              done;
+              Sdl.unlock_surface surface
           | fmt when fmt = Sdl.Pixel.format_rgb24 ->
               assert (Sdl.lock_surface surface = Ok ());
               let pix = Sdl.get_surface_pixels surface Bigarray.Int8_unsigned in
