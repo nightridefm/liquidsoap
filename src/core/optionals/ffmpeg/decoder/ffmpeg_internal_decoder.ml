@@ -133,8 +133,26 @@ let mk_video_decoder ~width ~height ~alpha ~stream ~field codec =
   let width = Avcodec.Video.get_width codec in
   let height = Avcodec.Video.get_height codec in
   let target_fps = Lazy.Mutexed.force Frame.video_rate in
+  (* Keep the source's alpha even when the negotiated content type says the
+     track has none.
+
+     `~alpha` comes from the content type, which Ffmpeg_utils.set_format_alpha
+     only infers from the file when that type is still UNCONSTRAINED - it is a
+     no-op once alpha has been unified to a value. A `fallback` unifies its
+     branches into one type, so an overlay pool whose fallback videos are plain
+     yuv420p pins alpha=false for the whole source; every alpha-bearing clip
+     decoded through it then loses its A plane in swscale and composites
+     opaque. The log tell is a request that already reads
+     `{video=yuv420p(alpha=false)}` before the alpha file is even opened.
+
+     Targeting a 4-plane format whenever the SOURCE carries alpha costs
+     nothing for yuv-only files (the condition is false) and makes the
+     alpha-overlay pipeline work regardless of what the type negotiated.
+     Ffmpeg_utils.unpack_image already builds an Image.YUV420.t with ~alpha
+     populated from the 4-plane case, and Video.Canvas.Image honours it. *)
   let target_pixel_format =
-    if alpha then Ffmpeg_utils.liq_frame_pixel_format_with_alpha
+    if alpha || Ffmpeg_utils.pixel_format_has_alpha pixel_format then
+      Ffmpeg_utils.liq_frame_pixel_format_with_alpha
     else Ffmpeg_utils.liq_frame_pixel_format
   in
   let scale =
