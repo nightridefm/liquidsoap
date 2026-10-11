@@ -132,7 +132,19 @@ CAMLprim value ocaml_avfilter_init(value _unit) {
   CAMLlocal1(_graph);
   filter_graph *record;
 
-  _graph = caml_alloc_custom(&graph_operations, sizeof(filter_graph *), 0, 1);
+  /* The handle is a pointer, but a configured graph pins hundreds of KB
+     natively (the buffersrc ring plus any auto-inserted scale/format
+     converter), and liquidsoap's video decoders build one Fps graph per
+     decoded file, so a playlist of short clips abandons one on every
+     rotation. Declared as costing nothing, they leave the OCaml major heap
+     (small: the video buffers are native) no reason to collect, the
+     finalizers run late and RSS ratchets up by the graphs waiting for them
+     (~430 KB a clip, GBs over days). Charge a representative cost so
+     collection keeps up, the AVPacket idiom of avcodec_stubs.c. The graph is
+     still empty here, so this is an estimate: it only needs to create GC
+     pressure. */
+  _graph =
+      caml_alloc_custom_mem(&graph_operations, sizeof(filter_graph *), 400000);
   Graph_val(_graph) = NULL;
   record = av_mallocz(sizeof(*record));
   if (!record)
