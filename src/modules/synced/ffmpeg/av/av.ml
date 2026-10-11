@@ -75,14 +75,16 @@ type target =
   | To_url of { url : string; interrupt : (unit -> bool) option }
   | To_custom of { write : write; seek : seek option }
 
-external alloc_container : unit -> 'line container = "ocaml_av_alloc_container"
+external alloc_container : int -> 'line container = "ocaml_av_alloc_container"
 external release : _ container -> unit = "ocaml_av_release"
 external close : _ container -> unit = "ocaml_av_close"
 
 (* A closed container whose release by collection is registered before
-   anything is opened in it. *)
-let new_container () =
-  let container = alloc_container () in
+   anything is opened in it. [native_cost] is what the GC is told it holds
+   outside the OCaml heap: release by collection only comes as soon as the GC
+   thinks it worth collecting. *)
+let new_container ?(native_cost = 0) () =
+  let container = alloc_container native_cost in
   Gc.finalise release container;
   container
 
@@ -376,8 +378,16 @@ external open_output_target :
   (string * value) array ->
   string array = "ocaml_av_open_output"
 
+(* An output pins its encoders, muxer and buffers natively, several MB (a
+   libx264 context alone). One is not always closed: liquidsoap's ffmpeg
+   encoder stops with a close wrapped in a catch-all, so a container whose
+   close raises (a dead RTMP sink) is left to the collector, and counted as
+   costing nothing it is not collected on any normal cycle. Inputs hold a
+   demuxer and keep the default. *)
+let output_native_cost = 4 * 1024 * 1024
+
 let open_target ?format ?(interleaved = true) ?opts target =
-  let container = new_container () in
+  let container = new_container ~native_cost:output_native_cost () in
   report_unused opts
     (open_output_target container target format interleaved (bindings opts));
   container

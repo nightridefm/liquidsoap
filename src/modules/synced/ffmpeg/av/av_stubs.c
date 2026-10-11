@@ -79,13 +79,19 @@ static struct custom_operations container_operations = {
     custom_serialize_default,   custom_deserialize_default,
     custom_compare_ext_default, custom_fixed_length_default};
 
-CAMLprim value ocaml_av_alloc_container(value _unit) {
-  CAMLparam1(_unit);
+/* [_native_cost] is the out-of-heap size the GC is told the container
+   stands for (see Av.new_container). */
+CAMLprim value ocaml_av_alloc_container(value _native_cost) {
+  CAMLparam1(_native_cost);
   CAMLlocal1(_container);
   container *record;
 
-  _container =
-      caml_alloc_custom(&container_operations, sizeof(container *), 0, 1);
+  if (Long_val(_native_cost) > 0)
+    _container = caml_alloc_custom_mem(
+        &container_operations, sizeof(container *), Long_val(_native_cost));
+  else
+    _container =
+        caml_alloc_custom(&container_operations, sizeof(container *), 0, 1);
   Container_val(_container) = NULL;
 
   record = av_mallocz(sizeof(*record));
